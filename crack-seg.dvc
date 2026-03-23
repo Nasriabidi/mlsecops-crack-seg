@@ -1,0 +1,6 @@
+outs:
+- md5: a8c02eec04cf9367cdef6c267e422ce1.dir
+  size: 110543496
+  nfiles: 8059
+  hash: md5
+  path: crack-seg
