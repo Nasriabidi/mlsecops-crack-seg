@@ -1,4 +1,5 @@
 [core]
-    remote = gdrive_remote
-['remote "gdrive_remote"']
-    url = gdrive://14q-SwviyWJ9aDtv3zUmTZyqelbD1mTux
+    remote = s3_remote
+['remote "s3_remote"']
+    url = s3://mlsecops-datasets-351611731527/crack-seg
+    region = us-east-1
