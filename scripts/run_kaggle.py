@@ -3,9 +3,10 @@ import os
 import sys
 import zipfile
 import tempfile
+import subprocess
 from pathlib import Path
 
-# ── Configure Kaggle auth before importing kaggle ─────────────────────────
+# ── Configure Kaggle auth ─────────────────────────────────────────────────
 kaggle_dir = os.path.expanduser("~/.kaggle")
 os.makedirs(kaggle_dir, exist_ok=True)
 kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
@@ -50,15 +51,14 @@ def zip_repo(output_path: str):
 
 
 def push_dataset(zip_path: str):
-    print("Pushing code to Kaggle dataset...")
+    print("Pushing code to Kaggle dataset via CLI...")
     git_sha = os.environ.get("GIT_SHA", "unknown")
 
     meta_dir = tempfile.mkdtemp()
     metadata = {
-        "title":     "mlsecops-crack-seg-code",
-        "id":        f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}",
-        "licenses":  [{"name": "CC0-1.0"}],
-        "isPrivate": False,
+        "title":    "mlsecops-crack-seg-code",
+        "id":       f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}",
+        "licenses": [{"name": "CC0-1.0"}]
     }
     with open(os.path.join(meta_dir, "dataset-metadata.json"), "w") as f:
         json.dump(metadata, f)
@@ -66,16 +66,16 @@ def push_dataset(zip_path: str):
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(meta_dir)
 
-    # Always use create_version — dataset already exists manually
-    api.dataset_create_version(
-        folder=meta_dir,
-        version_notes=f"CT update - {git_sha[:7]}",
-        quiet=False,
-        convert_to_csv=False,
-        delete_old_versions=False,
-        dir_mode="zip"
-    )
-    print("Dataset version pushed successfully.")
+    try:
+        subprocess.run([
+            "kaggle", "datasets", "version",
+            "-p", meta_dir,
+            "-m", f"CT update - {git_sha[:7]}"
+        ], check=True)
+        print("Dataset updated successfully via CLI.")
+    except subprocess.CalledProcessError as e:
+        print(f"CLI upload failed: {e}")
+        sys.exit(1)
 
 
 def trigger_notebook():

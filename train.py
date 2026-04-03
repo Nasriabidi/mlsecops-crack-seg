@@ -1,11 +1,3 @@
-"""
-Training Script — Crack Segmentation (YOLOv8n-seg)
-====================================================
-Steps: dvc pull → validate_dataset.py → train YOLOv8n-seg → log to MLflow
-NOTE: No S3 upload here — that belongs to user_data.sh in the CT pipeline
-
-Model naming: crack_seg_<git-sha-short>_<YYYYMMDD>.pt
-"""
 
 import sys
 import subprocess
