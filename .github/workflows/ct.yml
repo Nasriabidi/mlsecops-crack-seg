@@ -43,7 +43,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install Python deps for runner
-        run: pip install requests mlflow boto3 --quiet
+        run: pip install requests kaggle mlflow boto3 --quiet
 
       # ── Push code to Kaggle + trigger notebook ──────────────────────────────
       - name: Trigger Kaggle training
