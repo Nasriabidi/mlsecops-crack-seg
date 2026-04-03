@@ -38,10 +38,10 @@ pip install --quiet "dvc[s3]"
 # ── Run training pipeline ─────────────────────────────────────────────────────
 echo "[4/6] Starting training pipeline..."
 python train.py \
-  --epochs 5 \
-  --imgsz 640 \
-  --batch 16 \
-  --workers 16
+  --epochs 3 \
+  --imgsz 320 \
+  --batch 64 \
+  --workers 8
 
 # ── Find the named model file ─────────────────────────────────────────────────
 echo "[5/6] Locating trained model..."

@@ -24,7 +24,7 @@ variable "mlflow_bucket" {
 variable "instance_type" {
   description = "EC2 instance type for training"
   type        = string
-  default     = "c5.4xlarge"
+  default     = "c5.2xlarge"
 }
 
 variable "repo_url" {
