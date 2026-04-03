@@ -1,1 +1,28 @@
+# Dataset — managed by DVC, not Git
+/crack-seg/
+
+# DVC local config (machine-specific, may contain credential paths)
+.dvc/config.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+venv/
+
+# VS Code
+.vscode/
+
+# Training outputs (large files, not needed in repo)
+runs/
+dataset_checksum.json
+
+# Terraform
+infra/training/.terraform/
+infra/training/.terraform.lock.hcl
+infra/training/terraform.tfstate
+infra/training/terraform.tfstate.backup
+infra/training/terraform.tfvars
 /crack-seg

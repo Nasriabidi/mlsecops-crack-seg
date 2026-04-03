@@ -1,0 +1,13 @@
+# Crack segmentation dataset — managed via DVC + S3
+# Dataset versioning: DVC remote s3://mlsecops-datasets-351611731527/crack-seg
+# DO NOT add a download: field — dataset is pulled via: dvc pull
+
+path: ./crack-seg       # dataset root dir (relative to train.py location)
+train: images/train     # 3717 images
+val: images/val         # 112 images
+test: images/test       # 200 images
+
+# Classes
+nc: 1
+names:
+  0: crack

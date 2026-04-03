@@ -1,0 +1,14 @@
+# YOLOv8
+ultralytics>=8.0.0
+
+# Dataset validation
+Pillow>=9.0.0
+
+# DVC with S3 support
+dvc[s3]>=3.0.0
+
+# MLflow experiment tracking
+mlflow>=2.10.0
+
+# AWS SDK (needed by DVC + MLflow for S3 access)
+boto3>=1.26.0
