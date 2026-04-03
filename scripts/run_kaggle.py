@@ -18,9 +18,9 @@ with open(kaggle_json_path, "w") as f:
 os.chmod(kaggle_json_path, 0o600)
 
 # ── Now import kaggle ──────────────────────────────────────────────────────
-from kaggle.api.kaggle_api_extended import KaggleApiExtended
+from kaggle.api.kaggle_api_extended import KaggleApi
 
-api = KaggleApiExtended()
+api = KaggleApi()
 api.authenticate()
 
 KAGGLE_USERNAME = os.environ["KAGGLE_USERNAME"]
