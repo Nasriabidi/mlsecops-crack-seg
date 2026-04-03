@@ -48,7 +48,8 @@ jobs:
       # ── Push code to Kaggle + trigger notebook ──────────────────────────────
       - name: Trigger Kaggle training
         env:
-          KAGGLE_API_TOKEN:          ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_USERNAME:           ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY:                ${{ secrets.KAGGLE_KEY }}
           CT_AWS_ACCESS_KEY_ID:      ${{ secrets.CT_AWS_ACCESS_KEY_ID }}
           CT_AWS_SECRET_ACCESS_KEY:  ${{ secrets.CT_AWS_SECRET_ACCESS_KEY }}
           GIT_SHA:                   ${{ github.sha }}
