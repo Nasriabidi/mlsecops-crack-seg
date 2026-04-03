@@ -58,7 +58,7 @@ def push_dataset(zip_path: str):
         "title":     "mlsecops-crack-seg-code",
         "id":        f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}",
         "licenses":  [{"name": "CC0-1.0"}],
-        "isPrivate": True,
+        "isPrivate": False,
     }
     with open(os.path.join(meta_dir, "dataset-metadata.json"), "w") as f:
         json.dump(metadata, f)
@@ -66,29 +66,16 @@ def push_dataset(zip_path: str):
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(meta_dir)
 
-    try:
-        api.dataset_create_new(
-            folder=meta_dir,
-            public=False,
-            quiet=False,
-            convert_to_csv=False,
-            dir_mode="zip"
-        )
-        print("Dataset created successfully.")
-    except Exception as e:
-        if "already exists" in str(e).lower() or "403" in str(e):
-            api.dataset_create_version(
-                folder=meta_dir,
-                version_notes=f"CT update - {git_sha[:7]}",
-                quiet=False,
-                convert_to_csv=False,
-                delete_old_versions=False,
-                dir_mode="zip"
-            )
-            print("Dataset version updated successfully.")
-        else:
-            print(f"ERROR pushing dataset: {e}")
-            sys.exit(1)
+    # Always use create_version — dataset already exists manually
+    api.dataset_create_version(
+        folder=meta_dir,
+        version_notes=f"CT update - {git_sha[:7]}",
+        quiet=False,
+        convert_to_csv=False,
+        delete_old_versions=False,
+        dir_mode="zip"
+    )
+    print("Dataset version pushed successfully.")
 
 
 def trigger_notebook():
