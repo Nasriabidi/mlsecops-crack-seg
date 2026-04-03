@@ -1,81 +1,32 @@
+"""
+run_kaggle.py — Triggers existing Kaggle notebook via API
+No dataset upload needed — notebook clones repo directly from GitHub
+"""
+
 import json
 import os
 import sys
-import zipfile
 import tempfile
-import subprocess
-from pathlib import Path
 
 # ── Configure Kaggle auth ─────────────────────────────────────────────────
 kaggle_dir = os.path.expanduser("~/.kaggle")
 os.makedirs(kaggle_dir, exist_ok=True)
-kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
 
-with open(kaggle_json_path, "w") as f:
+with open(os.path.join(kaggle_dir, "kaggle.json"), "w") as f:
     json.dump({
         "username": os.environ["KAGGLE_USERNAME"],
         "key":      os.environ["KAGGLE_KEY"]
     }, f)
-os.chmod(kaggle_json_path, 0o600)
+os.chmod(os.path.join(kaggle_dir, "kaggle.json"), 0o600)
 
-# ── Now import kaggle ──────────────────────────────────────────────────────
+# ── Import kaggle ─────────────────────────────────────────────────────────
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 api = KaggleApi()
 api.authenticate()
 
 KAGGLE_USERNAME = os.environ["KAGGLE_USERNAME"]
-KAGGLE_DATASET  = "mlsecops-crack-seg-code"
 KAGGLE_NOTEBOOK = "mlsecops-crack-seg-training"
-
-
-def zip_repo(output_path: str):
-    files_to_include = [
-        "train.py",
-        "validate_dataset.py",
-        "crack-seg.yaml",
-        "crack-seg.dvc",
-        "requirements.txt",
-        ".dvc/config",
-        ".dvcignore",
-    ]
-    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files_to_include:
-            path = Path(f)
-            if path.exists():
-                zf.write(path, path)
-                print(f"  Added: {f}")
-            else:
-                print(f"  WARNING: {f} not found, skipping")
-    print(f"Zip created: {output_path}")
-
-
-def push_dataset(zip_path: str):
-    print("Pushing code to Kaggle dataset via CLI...")
-    git_sha = os.environ.get("GIT_SHA", "unknown")
-
-    meta_dir = tempfile.mkdtemp()
-    metadata = {
-        "title":    "mlsecops-crack-seg-code",
-        "id":       f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}",
-        "licenses": [{"name": "CC0-1.0"}]
-    }
-    with open(os.path.join(meta_dir, "dataset-metadata.json"), "w") as f:
-        json.dump(metadata, f)
-
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(meta_dir)
-
-    try:
-        subprocess.run([
-            "kaggle", "datasets", "version",
-            "-p", meta_dir,
-            "-m", f"CT update - {git_sha[:7]}"
-        ], check=True)
-        print("Dataset updated successfully via CLI.")
-    except subprocess.CalledProcessError as e:
-        print(f"CLI upload failed: {e}")
-        sys.exit(1)
 
 
 def trigger_notebook():
@@ -85,49 +36,45 @@ def trigger_notebook():
     aws_key_id = os.environ.get("CT_AWS_ACCESS_KEY_ID", "")
     aws_secret = os.environ.get("CT_AWS_SECRET_ACCESS_KEY", "")
 
-    notebook_source = open("scripts/kaggle_notebook.ipynb").read()
-
+    # Read the existing notebook source from Kaggle
+    print("Pulling existing notebook from Kaggle...")
     kernel_meta_dir = tempfile.mkdtemp()
-    kernel_metadata = {
-        "id":                  f"{KAGGLE_USERNAME}/{KAGGLE_NOTEBOOK}",
-        "title":               KAGGLE_NOTEBOOK,
-        "code_file":           "kaggle_notebook.ipynb",
-        "language":            "python",
-        "kernel_type":         "notebook",
-        "is_private":          True,
-        "enable_gpu":          True,
-        "enable_internet":     True,
-        "dataset_sources":     [f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}"],
-        "competition_sources": [],
-        "kernel_sources":      [],
-        "environment_variables": [
-            {"key": "GIT_SHA",                  "value": git_sha},
-            {"key": "CT_AWS_ACCESS_KEY_ID",     "value": aws_key_id},
-            {"key": "CT_AWS_SECRET_ACCESS_KEY", "value": aws_secret},
-        ]
-    }
 
-    with open(os.path.join(kernel_meta_dir, "kernel-metadata.json"), "w") as f:
+    # Pull existing kernel
+    api.kernels_pull(
+        kernel=f"{KAGGLE_USERNAME}/{KAGGLE_NOTEBOOK}",
+        path=kernel_meta_dir,
+        metadata=True
+    )
+
+    # Update kernel metadata with new env variables
+    meta_path = os.path.join(kernel_meta_dir, "kernel-metadata.json")
+    with open(meta_path, "r") as f:
+        kernel_metadata = json.load(f)
+
+    # Inject environment variables
+    kernel_metadata["enable_gpu"]      = True
+    kernel_metadata["enable_internet"] = True
+    kernel_metadata["environment_variables"] = [
+        {"key": "GIT_SHA",                  "value": git_sha},
+        {"key": "CT_AWS_ACCESS_KEY_ID",     "value": aws_key_id},
+        {"key": "CT_AWS_SECRET_ACCESS_KEY", "value": aws_secret},
+    ]
+
+    with open(meta_path, "w") as f:
         json.dump(kernel_metadata, f)
 
-    with open(os.path.join(kernel_meta_dir, "kaggle_notebook.ipynb"), "w") as f:
-        f.write(notebook_source)
-
+    # Push to trigger a new run
     api.kernels_push(kernel_meta_dir)
-    print("Notebook triggered successfully.")
+    print(f"Notebook triggered successfully.")
+    print(f"GIT_SHA: {git_sha}")
+    print(f"Track at: https://www.kaggle.com/code/{KAGGLE_USERNAME}/{KAGGLE_NOTEBOOK}")
 
 
 def main():
     git_sha = os.environ.get("GIT_SHA", "unknown")
     print(f"Git SHA: {git_sha}")
-
-    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        zip_path = tmp.name
-
-    zip_repo(zip_path)
-    push_dataset(zip_path)
     trigger_notebook()
-
     print("Done. GitHub Actions will now poll S3 for the model.")
 
 
