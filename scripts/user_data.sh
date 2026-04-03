@@ -41,7 +41,7 @@ python train.py \
   --epochs 5 \
   --imgsz 640 \
   --batch 16 \
-  --workers 4
+  --workers 16
 
 # ── Find the named model file ─────────────────────────────────────────────────
 echo "[5/6] Locating trained model..."
