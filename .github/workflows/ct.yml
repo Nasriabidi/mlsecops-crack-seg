@@ -16,19 +16,18 @@ on:
 env:
   AWS_REGION:    us-east-1
   MODELS_BUCKET: mlsecops-models-351611731527
+  TF_WORKING_DIR: infra
 
 jobs:
   train:
-    name: Kaggle GPU Training
+    name: Provision EC2 + Train + Destroy
     runs-on: ubuntu-latest
 
     steps:
 
-      # ── Checkout ────────────────────────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ── AWS credentials (for S3 polling + MLflow) ───────────────────────────
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -36,26 +35,22 @@ jobs:
           aws-secret-access-key: ${{ secrets.CT_AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ env.AWS_REGION }}
 
-      # ── Python setup ────────────────────────────────────────────────────────
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
-          python-version: '3.10'
+          terraform_version: 1.7.0
 
-      - name: Install Python deps for runner
-        run: pip install requests kaggle mlflow boto3 --quiet
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
 
-      # ── Push code to Kaggle + trigger notebook ──────────────────────────────
-      - name: Trigger Kaggle training
-        env:
-          KAGGLE_USERNAME:           ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY:                ${{ secrets.KAGGLE_KEY }}
-          CT_AWS_ACCESS_KEY_ID:      ${{ secrets.CT_AWS_ACCESS_KEY_ID }}
-          CT_AWS_SECRET_ACCESS_KEY:  ${{ secrets.CT_AWS_SECRET_ACCESS_KEY }}
-          GIT_SHA:                   ${{ github.sha }}
-        run: python scripts/run_kaggle.py
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -var="git_sha=${{ github.sha }}" \
+            -var="repo_url=https://github.com/${{ github.repository }}.git"
 
-      # ── Compute expected model filename ─────────────────────────────────────
       - name: Compute model filename
         id: model
         run: |
@@ -68,22 +63,27 @@ jobs:
           echo "key=${MODEL_KEY}"   >> $GITHUB_OUTPUT
           echo "Model key: ${MODEL_KEY}"
 
-      # ── Poll S3 for model — presence = training done ─────────────────────────
       - name: Wait for model in S3
-        timeout-minutes: 60
+        timeout-minutes: 120
         run: |
           echo "Waiting for: s3://${{ env.MODELS_BUCKET }}/${{ steps.model.outputs.key }}"
           aws s3api wait object-exists \
             --bucket ${{ env.MODELS_BUCKET }} \
             --key    ${{ steps.model.outputs.key }}
-          echo "Model found - training complete"
+          echo "Model found in S3 - training complete"
 
-      # ── Register model in MLflow ─────────────────────────────────────────────
+      - name: Terraform Destroy
+        if: always()
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="git_sha=${{ github.sha }}" \
+            -var="repo_url=https://github.com/${{ github.repository }}.git"
+
       - name: Register model in MLflow
         if: success()
-        env:
-          GIT_SHA: ${{ github.sha }}
         run: |
+          pip install mlflow boto3 --quiet
           python - <<'EOF'
           import mlflow
           import os
@@ -91,7 +91,7 @@ jobs:
           model_name = "${{ steps.model.outputs.name }}"
           model_key  = "${{ steps.model.outputs.key }}"
           bucket     = "${{ env.MODELS_BUCKET }}"
-          git_sha    = os.environ["GIT_SHA"]
+          git_sha    = "${{ github.sha }}"
 
           mlflow.set_tracking_uri("s3://mlsecops-mlflow-351611731527")
           client = mlflow.tracking.MlflowClient()
