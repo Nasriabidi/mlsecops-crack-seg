@@ -1,5 +1,5 @@
 """
-run_kaggle.py — Called by GitHub Actions to:
+run_kaggle.py — Uses official Kaggle Python client to:
 1. Push repo code as a Kaggle dataset
 2. Trigger the training notebook
 """
@@ -9,33 +9,34 @@ import sys
 import json
 import zipfile
 import tempfile
-import requests
 from pathlib import Path
 
-# ── Kaggle API credentials ─────────────────────────────────────────────────
-KAGGLE_TOKEN    = os.environ["KAGGLE_API_TOKEN"]
+# ── Configure Kaggle auth before importing kaggle ─────────────────────────
+# The kaggle package reads from KAGGLE_CONFIG_DIR/kaggle.json
+# We build that file from the KAGGLE_API_TOKEN env var
+
+import json, os
+token = os.environ["KAGGLE_API_TOKEN"]
+kaggle_dir = os.path.expanduser("~/.kaggle")
+os.makedirs(kaggle_dir, exist_ok=True)
+kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
+
+with open(kaggle_json_path, "w") as f:
+    json.dump({"token": token}, f)
+os.chmod(kaggle_json_path, 0o600)
+
+# ── Now import kaggle ──────────────────────────────────────────────────────
+from kaggle.api.kaggle_api_extended import KaggleApiExtended
+
+api = KaggleApiExtended()
+api.authenticate()
+
 KAGGLE_USERNAME = "nasriabidi"
 KAGGLE_DATASET  = "mlsecops-crack-seg-code"
 KAGGLE_NOTEBOOK = "mlsecops-crack-seg-training"
 
-# New Kaggle API token format uses this header
-HEADERS = {
-    "Content-Type": "application/json",
-    "X-Kaggle-Key": KAGGLE_TOKEN
-}
-
-API = "https://www.kaggle.com/api/v1"
-
-
-def get_session():
-    """Create requests session with correct Kaggle auth."""
-    session = requests.Session()
-    session.headers.update({"X-Kaggle-Key": KAGGLE_TOKEN})
-    return session
-
 
 def zip_repo(output_path: str):
-    """Zip all relevant repo files to push to Kaggle as a dataset."""
     files_to_include = [
         "train.py",
         "validate_dataset.py",
@@ -57,51 +58,54 @@ def zip_repo(output_path: str):
 
 
 def push_dataset(zip_path: str):
-    """Push zipped code as a Kaggle dataset (creates or updates)."""
     print("Pushing code to Kaggle dataset...")
-    session = get_session()
-
     git_sha = os.environ.get("GIT_SHA", "unknown")
 
-    # Check if dataset exists
-    r = session.get(f"{API}/datasets/{KAGGLE_USERNAME}/{KAGGLE_DATASET}")
-    print(f"Dataset check status: {r.status_code}")
+    # Write dataset metadata
+    meta_dir = tempfile.mkdtemp()
+    metadata = {
+        "title":    "mlsecops-crack-seg-code",
+        "id":       f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}",
+        "licenses": [{"name": "CC0-1.0"}],
+        "isPrivate": True,
+    }
+    with open(os.path.join(meta_dir, "dataset-metadata.json"), "w") as f:
+        json.dump(metadata, f)
 
-    with open(zip_path, "rb") as f:
-        files = {"file": (os.path.basename(zip_path), f, "application/zip")}
+    # Extract zip to meta_dir so kaggle client can upload
+    import zipfile as zf
+    with zf.ZipFile(zip_path, "r") as z:
+        z.extractall(meta_dir)
 
-        if r.status_code == 200:
-            # Update existing dataset — new version
-            r2 = session.post(
-                f"{API}/datasets/{KAGGLE_USERNAME}/{KAGGLE_DATASET}/versions",
-                data={"versionNotes": f"CT update - {git_sha[:7]}"},
-                files=files
+    try:
+        # Try to create new dataset
+        api.dataset_create_new(
+            folder=meta_dir,
+            public=False,
+            quiet=False,
+            convert_to_csv=False,
+            dir_mode="zip"
+        )
+        print("Dataset created successfully.")
+    except Exception as e:
+        if "already exists" in str(e).lower() or "403" in str(e):
+            # Dataset exists — create new version
+            api.dataset_create_version(
+                folder=meta_dir,
+                version_notes=f"CT update - {git_sha[:7]}",
+                quiet=False,
+                convert_to_csv=False,
+                delete_old_versions=False,
+                dir_mode="zip"
             )
+            print("Dataset version updated successfully.")
         else:
-            # Create new dataset
-            metadata = {
-                "title":    "mlsecops-crack-seg-code",
-                "id":       f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}",
-                "licenses": [{"name": "CC0-1.0"}],
-                "isPrivate": True,
-            }
-            r2 = session.post(
-                f"{API}/datasets",
-                data={"body": json.dumps(metadata)},
-                files=files
-            )
-
-    print(f"Dataset push status: {r2.status_code}")
-    if r2.status_code not in (200, 201):
-        print(f"ERROR: {r2.text[:500]}")
-        sys.exit(1)
-    print("Dataset pushed successfully.")
+            print(f"ERROR pushing dataset: {e}")
+            sys.exit(1)
 
 
 def trigger_notebook():
-    """Push and run the training notebook on Kaggle T4 GPU."""
     print("Triggering Kaggle notebook...")
-    session = get_session()
 
     git_sha    = os.environ.get("GIT_SHA", "unknown")
     aws_key_id = os.environ.get("CT_AWS_ACCESS_KEY_ID", "")
@@ -109,31 +113,34 @@ def trigger_notebook():
 
     notebook_source = open("scripts/kaggle_notebook.ipynb").read()
 
-    payload = {
-        "title":          KAGGLE_NOTEBOOK,
-        "text":           notebook_source,
-        "language":       "python",
-        "kernelType":     "notebook",
-        "isPrivate":      True,
-        "enableGpu":      True,
-        "enableInternet": True,
-        "datasetDataSources": [
-            f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}"
-        ],
-        "environmentVariables": [
+    # Write kernel metadata
+    kernel_meta_dir = tempfile.mkdtemp()
+    kernel_metadata = {
+        "id":               f"{KAGGLE_USERNAME}/{KAGGLE_NOTEBOOK}",
+        "title":            KAGGLE_NOTEBOOK,
+        "code_file":        "kaggle_notebook.ipynb",
+        "language":         "python",
+        "kernel_type":      "notebook",
+        "is_private":       True,
+        "enable_gpu":       True,
+        "enable_internet":  True,
+        "dataset_sources":  [f"{KAGGLE_USERNAME}/{KAGGLE_DATASET}"],
+        "competition_sources": [],
+        "kernel_sources":   [],
+        "environment_variables": [
             {"key": "GIT_SHA",                  "value": git_sha},
             {"key": "CT_AWS_ACCESS_KEY_ID",     "value": aws_key_id},
             {"key": "CT_AWS_SECRET_ACCESS_KEY", "value": aws_secret},
         ]
     }
 
-    r = session.post(f"{API}/kernels/push", json=payload)
-    print(f"Notebook trigger status: {r.status_code}")
+    with open(os.path.join(kernel_meta_dir, "kernel-metadata.json"), "w") as f:
+        json.dump(kernel_metadata, f)
 
-    if r.status_code not in (200, 201):
-        print(f"ERROR: {r.text[:500]}")
-        sys.exit(1)
+    with open(os.path.join(kernel_meta_dir, "kaggle_notebook.ipynb"), "w") as f:
+        f.write(notebook_source)
 
+    api.kernels_push(kernel_meta_dir)
     print("Notebook triggered successfully.")
 
 
