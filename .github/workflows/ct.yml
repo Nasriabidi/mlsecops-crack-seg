@@ -1,0 +1,129 @@
+name: Continuous Training — Crack Segmentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'crack-seg.dvc'        # triggers when dataset version changes
+      - 'train.py'             # triggers when training code changes
+      - 'validate_dataset.py'  # triggers when validation code changes
+      - 'requirements.txt'  
+      - 'README.md' # triggers when dependencies change
+
+  workflow_dispatch:           # allows manual trigger from GitHub UI
+
+env:
+  AWS_REGION: us-east-1
+  MODELS_BUCKET: mlsecops-models-351611731527
+  TF_WORKING_DIR: infra
+
+jobs:
+  train:
+    name: Provision EC2 + Train + Destroy
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ── AWS credentials ─────────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.CT_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.CT_AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # ── Terraform setup ─────────────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+
+      # ── Terraform init ──────────────────────────────────────────────────────
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      # ── Terraform apply — provision EC2 ────────────────────────────────────
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -var="git_sha=${{ github.sha }}" \
+            -var="repo_url=https://github.com/${{ github.repository }}.git"
+
+      # ── Compute expected model filename ────────────────────────────────────
+      - name: Compute model filename
+        id: model
+        run: |
+          SHA7="${{ github.sha }}"
+          SHA7="${SHA7:0:7}"
+          DATE=$(date -u +%Y%m%d)
+          MODEL_NAME="crack_seg_${SHA7}_${DATE}.pt"
+          MODEL_KEY="crack-seg/${{ github.sha }}/${MODEL_NAME}"
+          echo "name=${MODEL_NAME}" >> $GITHUB_OUTPUT
+          echo "key=${MODEL_KEY}"   >> $GITHUB_OUTPUT
+          echo "Model key: ${MODEL_KEY}"
+
+      # ── Poll S3 for model file — presence = training done ──────────────────
+      - name: Wait for model in S3
+        timeout-minutes: 120
+        run: |
+          echo "Waiting for: s3://${{ env.MODELS_BUCKET }}/${{ steps.model.outputs.key }}"
+          aws s3api wait object-exists \
+            --bucket ${{ env.MODELS_BUCKET }} \
+            --key    ${{ steps.model.outputs.key }}
+          echo "Model found in S3 - training complete"
+
+      # ── Terraform destroy — always runs ────────────────────────────────────
+      - name: Terraform Destroy
+        if: always()
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="git_sha=${{ github.sha }}" \
+            -var="repo_url=https://github.com/${{ github.repository }}.git"
+
+      # ── Register model in MLflow ────────────────────────────────────────────
+      - name: Register model in MLflow
+        if: success()
+        run: |
+          pip install mlflow boto3 --quiet
+          python - <<'EOF'
+          import mlflow
+          import os
+
+          model_name  = "${{ steps.model.outputs.name }}"
+          model_key   = "${{ steps.model.outputs.key }}"
+          bucket      = "${{ env.MODELS_BUCKET }}"
+          git_sha     = "${{ github.sha }}"
+
+          mlflow.set_tracking_uri("s3://mlsecops-mlflow-351611731527")
+          client = mlflow.tracking.MlflowClient()
+
+          # Find the run that logged this model (match by dataset_version)
+          runs = client.search_runs(
+              experiment_ids=["1"],
+              filter_string=f"params.dataset_version = '{git_sha}'"
+          )
+
+          if not runs:
+              print(f"No MLflow run found for git_sha={git_sha}")
+              exit(1)
+
+          run_id = runs[0].info.run_id
+          model_uri = f"s3://{bucket}/{model_key}"
+
+          # Register model
+          mv = mlflow.register_model(
+              model_uri=f"runs:/{run_id}/weights",
+              name="crack-seg"
+          )
+
+          print(f"Model registered: crack-seg v{mv.version}")
+          print(f"Run ID: {run_id}")
+          EOF
