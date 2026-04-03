@@ -1,28 +1,26 @@
-"""
-run_kaggle.py — Uses official Kaggle Python client to:
-1. Push repo code as a Kaggle dataset
-2. Trigger the training notebook
-"""
-
+import json
 import os
 import sys
-import json
 import zipfile
 import tempfile
 from pathlib import Path
 
-# ── Configure Kaggle auth before importing kaggle ─────────────────────────
-# The kaggle package reads from KAGGLE_CONFIG_DIR/kaggle.json
-# We build that file from the KAGGLE_API_TOKEN env var
+# ── Constants — must be defined before auth setup ─────────────────────────
+KAGGLE_USERNAME = "nasriabidi"
+KAGGLE_DATASET  = "mlsecops-crack-seg-code"
+KAGGLE_NOTEBOOK = "mlsecops-crack-seg-training"
 
-import json, os
+# ── Configure Kaggle auth before importing kaggle ─────────────────────────
 token = os.environ["KAGGLE_API_TOKEN"]
 kaggle_dir = os.path.expanduser("~/.kaggle")
 os.makedirs(kaggle_dir, exist_ok=True)
 kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
 
 with open(kaggle_json_path, "w") as f:
-    json.dump({"token": token}, f)
+    json.dump({
+        "username": KAGGLE_USERNAME,
+        "token":    token
+    }, f)
 os.chmod(kaggle_json_path, 0o600)
 
 # ── Now import kaggle ──────────────────────────────────────────────────────
@@ -30,10 +28,6 @@ from kaggle.api.kaggle_api_extended import KaggleApiExtended
 
 api = KaggleApiExtended()
 api.authenticate()
-
-KAGGLE_USERNAME = "nasriabidi"
-KAGGLE_DATASET  = "mlsecops-crack-seg-code"
-KAGGLE_NOTEBOOK = "mlsecops-crack-seg-training"
 
 
 def zip_repo(output_path: str):
@@ -61,7 +55,7 @@ def push_dataset(zip_path: str):
     print("Pushing code to Kaggle dataset...")
     git_sha = os.environ.get("GIT_SHA", "unknown")
 
-    # Write dataset metadata
+    # Extract zip to a temp dir with metadata
     meta_dir = tempfile.mkdtemp()
     metadata = {
         "title":    "mlsecops-crack-seg-code",
@@ -72,9 +66,8 @@ def push_dataset(zip_path: str):
     with open(os.path.join(meta_dir, "dataset-metadata.json"), "w") as f:
         json.dump(metadata, f)
 
-    # Extract zip to meta_dir so kaggle client can upload
-    import zipfile as zf
-    with zf.ZipFile(zip_path, "r") as z:
+    # Extract zip contents into meta_dir
+    with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(meta_dir)
 
     try:
@@ -89,7 +82,7 @@ def push_dataset(zip_path: str):
         print("Dataset created successfully.")
     except Exception as e:
         if "already exists" in str(e).lower() or "403" in str(e):
-            # Dataset exists — create new version
+            # Dataset exists — push new version
             api.dataset_create_version(
                 folder=meta_dir,
                 version_notes=f"CT update - {git_sha[:7]}",
@@ -113,7 +106,7 @@ def trigger_notebook():
 
     notebook_source = open("scripts/kaggle_notebook.ipynb").read()
 
-    # Write kernel metadata
+    # Write kernel metadata + notebook to temp dir
     kernel_meta_dir = tempfile.mkdtemp()
     kernel_metadata = {
         "id":               f"{KAGGLE_USERNAME}/{KAGGLE_NOTEBOOK}",
