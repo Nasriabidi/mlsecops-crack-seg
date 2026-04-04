@@ -9,11 +9,12 @@ from pathlib import Path
 import mlflow
 from ultralytics import YOLO
 
-DATASET_PATH    = Path("./crack-seg")
-DATASET_YAML    = "crack-seg.yaml"
-MODEL_WEIGHTS   = "yolov8n-seg.pt"
-MLFLOW_S3_URI   = "s3://mlsecops-mlflow-351611731527"
-MLFLOW_EXP_NAME = "crack-seg-training"
+DATASET_PATH         = Path("./crack-seg")
+DATASET_YAML         = "crack-seg.yaml"
+MODEL_WEIGHTS        = "yolov8n-seg.pt"
+MLFLOW_TRACKING_URI  = "sqlite:///mlflow.db"
+MLFLOW_ARTIFACT_URI  = "s3://mlsecops-mlflow-351611731527"
+MLFLOW_EXP_NAME      = "crack-seg-training"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
 log = logging.getLogger(__name__)
@@ -87,8 +88,11 @@ def train(epochs: int, imgsz: int, batch: int, workers: int, model_name: str) ->
         exist_ok=True,
     )
 
-    # Find best.pt wherever YOLOv8 saved it
-    matches = glob.glob("runs/**/best.pt", recursive=True)
+    # Find best.pt — exclude mlflow folder
+    matches = [
+        m for m in glob.glob("runs/**/best.pt", recursive=True)
+        if "mlflow" not in m
+    ]
     if not matches:
         log.error("Training finished but best.pt not found anywhere in runs/")
         sys.exit(1)
@@ -116,10 +120,11 @@ def log_to_mlflow(
 ):
     log.info("Logging experiment to MLflow...")
 
-    mlflow.set_tracking_uri(MLFLOW_S3_URI)
+    # SQLite for tracking, S3 for artifacts
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXP_NAME)
 
-    with mlflow.start_run():
+    with mlflow.start_run(tags={"dataset_version": dataset_version}):
 
         # ── Params ────────────────────────────────────────────────────────────
         mlflow.log_params({
@@ -145,7 +150,7 @@ def log_to_mlflow(
             else:
                 log.warning(f"Metric '{yolo_key}' not found in results, skipping.")
 
-        # ── Artifact: named model file ────────────────────────────────────────
+        # ── Artifact: named model file ─────────────────────────────────────
         mlflow.log_artifact(str(best_weights), artifact_path="weights")
 
         run_id = mlflow.active_run().info.run_id
