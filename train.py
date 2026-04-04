@@ -137,10 +137,15 @@ def log_to_mlflow(
 
         # ── Metrics ───────────────────────────────────────────────────────────
         metrics_map = {
-            "mAP50":    "metrics/mAP50(M)",
-            "mAP50_95": "metrics/mAP50-95(M)",
-            "box_loss": "val/box_loss",
-            "seg_loss": "val/seg_loss",
+            "precision_box":  "metrics/precision(B)",
+            "recall_box":     "metrics/recall(B)",
+            "mAP50_box":      "metrics/mAP50(B)",
+            "mAP50_95_box":   "metrics/mAP50-95(B)",
+            "precision_mask": "metrics/precision(M)",
+            "recall_mask":    "metrics/recall(M)",
+            "mAP50_mask":     "metrics/mAP50(M)",
+            "mAP50_95_mask":  "metrics/mAP50-95(M)",
+            "fitness":        "fitness",
         }
 
         for mlflow_key, yolo_key in metrics_map.items():

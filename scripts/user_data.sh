@@ -19,7 +19,7 @@ echo "=============================================="
 # ── System update + dependencies ──────────────────────────────────────────────
 echo "[1/6] Installing system dependencies..."
 apt-get update -q
-apt-get install -y git python3-pip awscli
+apt-get install -y git python3-pip libgl1 libglib2.0-0
 
 # ── Clone repo at exact commit ────────────────────────────────────────────────
 echo "[2/6] Cloning repo at commit $GIT_SHA..."
@@ -30,14 +30,15 @@ git checkout "$GIT_SHA"
 
 # ── Install Python dependencies ───────────────────────────────────────────────
 echo "[3/6] Installing Python dependencies..."
-pip install --quiet -r requirements.txt
-
-# ── Install DVC S3 support ────────────────────────────────────────────────────
-pip install --quiet "dvc[s3]"
+pip3 install ultralytics mlflow boto3 Pillow --quiet
+pip3 install awscli --quiet --upgrade
+pip3 install dvc --quiet
+pip3 install dvc-s3 --quiet
+pip3 install s3fs --quiet
 
 # ── Run training pipeline ─────────────────────────────────────────────────────
 echo "[4/6] Starting training pipeline..."
-python train.py \
+python3 train.py \
   --epochs 3 \
   --imgsz 320 \
   --batch 64 \
@@ -45,7 +46,7 @@ python train.py \
 
 # ── Find the named model file ─────────────────────────────────────────────────
 echo "[5/6] Locating trained model..."
-MODEL_FILE=$(find runs/segment/crack_seg/weights/ -name "crack_seg_*.pt" | head -1)
+MODEL_FILE=$(find runs/ -name "crack_seg_*.pt" | head -1)
 
 if [ -z "$MODEL_FILE" ]; then
   echo "ERROR: No model file found. Training may have failed."
@@ -66,6 +67,5 @@ echo " s3://$MODELS_BUCKET/crack-seg/$GIT_SHA/$MODEL_NAME"
 echo " $(date -u)"
 echo "=============================================="
 
-# ── Signal success then shutdown ──────────────────────────────────────────────
 echo "Training complete. Instance will shut down now."
 shutdown -h now
