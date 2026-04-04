@@ -1,5 +1,5 @@
-
 import sys
+import glob
 import subprocess
 import argparse
 import logging
@@ -87,10 +87,14 @@ def train(epochs: int, imgsz: int, batch: int, workers: int, model_name: str) ->
         exist_ok=True,
     )
 
-    best_weights = Path("runs/segment/crack_seg/weights/best.pt")
-    if not best_weights.exists():
-        log.error(f"Training finished but best.pt not found at {best_weights}")
+    # Find best.pt wherever YOLOv8 saved it
+    matches = glob.glob("runs/**/best.pt", recursive=True)
+    if not matches:
+        log.error("Training finished but best.pt not found anywhere in runs/")
         sys.exit(1)
+
+    best_weights = Path(matches[0])
+    log.info(f"Found best.pt at: {best_weights}")
 
     # Rename best.pt → crack_seg_<sha7>_<YYYYMMDD>.pt
     named_weights = best_weights.parent / model_name
