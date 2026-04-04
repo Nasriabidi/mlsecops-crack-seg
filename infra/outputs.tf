@@ -4,6 +4,6 @@ output "instance_id" {
 }
 
 output "ami_used" {
-  description = "Deep Learning AMI used for training"
-  value       = data.aws_ami.deep_learning.name
+  description = "AMI used for training"
+  value       = data.aws_ami.ubuntu.name
 }
