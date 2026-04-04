@@ -1,21 +1,3 @@
-"""
-Dataset Validation Script — Crack Segmentation (YOLOv8)
-=========================================================
-Validates folder structure, image format/resolution,
-label file existence, and computes MD5 checksums.
-
-Real dataset structure:
-    crack-seg/
-    ├── images/  train | val | test
-    └── labels/  train | val | test
-
-Usage:
-    python validate_dataset.py --dataset-path ./crack-seg
-CI Usage:
-    python validate_dataset.py --dataset-path ./crack-seg --ci
-    Exit code 0 = valid | Exit code 1 = invalid
-"""
-
 import os
 import sys
 import json
@@ -99,7 +81,7 @@ def check_image_formats_and_resolution(dataset_path: Path, check_resolution: boo
 
     log.info("  Resolution distribution across dataset:")
     for res, count in sorted(resolution_counts.items(), key=lambda x: -x[1]):
-        log.info(f"    {res[0]}x{res[1]} → {count} images")
+        log.info(f"    {res[0]}x{res[1]} -> {count} images")
     return errors, all_images
 
 
@@ -112,7 +94,7 @@ def check_label_files(dataset_path: Path, image_paths: list) -> list:
     """
     errors = []
     for img_path in image_paths:
-        subset = img_path.parent.name          # train | val | test
+        subset = img_path.parent.name
         label_path = (
             dataset_path / "labels" / subset / img_path.with_suffix(".txt").name
         )
@@ -121,8 +103,9 @@ def check_label_files(dataset_path: Path, image_paths: list) -> list:
                 f"Missing label: {label_path.relative_to(dataset_path)}"
             )
         elif label_path.stat().st_size == 0:
-            errors.append(
-                f"Empty label file: {label_path.relative_to(dataset_path)}"
+            # Empty label files are valid in YOLO — means no objects in this image
+            log.warning(
+                f"  Empty label file (negative sample): {label_path.relative_to(dataset_path)}"
             )
     return errors
 
@@ -153,9 +136,9 @@ def validate(dataset_path: Path, check_resolution: bool = True) -> bool:
     all_errors.extend(errs)
     if errs:
         for e in errs:
-            log.error(f"  ✗ {e}")
+            log.error(f"  x {e}")
     else:
-        log.info("  ✓ Folder structure is valid")
+        log.info("  OK Folder structure is valid")
 
     log.info("\n[2/4] Checking image formats and resolution...")
     errs, valid_images = check_image_formats_and_resolution(
@@ -164,38 +147,38 @@ def validate(dataset_path: Path, check_resolution: bool = True) -> bool:
     all_errors.extend(errs)
     if errs:
         for e in errs[:20]:
-            log.error(f"  ✗ {e}")
+            log.error(f"  x {e}")
         if len(errs) > 20:
             log.error(f"  ... and {len(errs) - 20} more errors")
     else:
-        log.info(f"  ✓ All {len(valid_images)} images are valid")
+        log.info(f"  OK All {len(valid_images)} images are valid")
 
     log.info("\n[3/4] Checking label files...")
     errs = check_label_files(dataset_path, valid_images)
     all_errors.extend(errs)
     if errs:
         for e in errs[:20]:
-            log.error(f"  ✗ {e}")
+            log.error(f"  x {e}")
         if len(errs) > 20:
             log.error(f"  ... and {len(errs) - 20} more errors")
     else:
-        log.info("  ✓ All label files present and non-empty")
+        log.info("  OK All label files present and non-empty")
 
     log.info("\n[4/4] Computing integrity checksum...")
     checksum_path = dataset_path.parent / CHECKSUM_OUTPUT_FILE
     if valid_images:
         checksum = compute_and_save_checksum(valid_images, checksum_path)
-        log.info(f"  ✓ Aggregate MD5: {checksum}")
+        log.info(f"  OK Aggregate MD5: {checksum}")
     else:
-        log.warning("  ⚠ No valid images found, skipping checksum.")
+        log.warning("  WARN No valid images found, skipping checksum.")
 
     log.info("\n" + "=" * 55)
     if all_errors:
-        log.error(f"  VALIDATION FAILED — {len(all_errors)} error(s) found")
+        log.error(f"  VALIDATION FAILED -- {len(all_errors)} error(s) found")
         log.info("=" * 55)
         return False
     else:
-        log.info("  VALIDATION PASSED — Dataset is ready for training")
+        log.info("  VALIDATION PASSED -- Dataset is ready for training")
         log.info("=" * 55)
         return True
 
