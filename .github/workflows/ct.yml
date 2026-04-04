@@ -64,13 +64,27 @@ jobs:
           echo "Model key: ${MODEL_KEY}"
 
       - name: Wait for model in S3
-        timeout-minutes: 120
+        timeout-minutes: 60
         run: |
           echo "Waiting for: s3://${{ env.MODELS_BUCKET }}/${{ steps.model.outputs.key }}"
-          aws s3api wait object-exists \
-            --bucket ${{ env.MODELS_BUCKET }} \
-            --key    ${{ steps.model.outputs.key }}
-          echo "Model found in S3 - training complete"
+
+          MAX_ATTEMPTS=120
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if aws s3api head-object \
+              --bucket ${{ env.MODELS_BUCKET }} \
+              --key "${{ steps.model.outputs.key }}" 2>/dev/null; then
+              echo "Model found in S3 - training complete!"
+              exit 0
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS — waiting 30s..."
+            sleep 30
+          done
+
+          echo "ERROR: Model not found after 60 minutes"
+          exit 1
 
       - name: Terraform Destroy
         if: always()
@@ -90,25 +104,4 @@ jobs:
 
           model_name = "${{ steps.model.outputs.name }}"
           model_key  = "${{ steps.model.outputs.key }}"
-          bucket     = "${{ env.MODELS_BUCKET }}"
-          git_sha    = "${{ github.sha }}"
-
-          mlflow.set_tracking_uri("s3://mlsecops-mlflow-351611731527")
-          client = mlflow.tracking.MlflowClient()
-
-          runs = client.search_runs(
-              experiment_ids=["1"],
-              filter_string=f"params.dataset_version = '{git_sha}'"
-          )
-
-          if not runs:
-              print(f"No MLflow run found for git_sha={git_sha}")
-              exit(1)
-
-          run_id = runs[0].info.run_id
-          mv = mlflow.register_model(
-              model_uri=f"runs:/{run_id}/weights",
-              name="crack-seg"
-          )
-          print(f"Model registered: crack-seg v{mv.version}")
-          EOF
+          bucket     = "${{ env.MODELS_BUCKET }
