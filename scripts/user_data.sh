@@ -16,6 +16,14 @@ echo " Git SHA: $GIT_SHA"
 echo " $(date -u)"
 echo "=============================================="
 
+# ── Upload log to S3 on exit (success or failure) ─────────────────────────────
+upload_log() {
+  echo "Uploading log to S3..."
+  aws s3 cp "$LOG_FILE" \
+    "s3://$MODELS_BUCKET/crack-seg/$GIT_SHA/training.log" || true
+}
+trap upload_log EXIT
+
 # ── System update + dependencies ──────────────────────────────────────────────
 echo "[1/6] Installing system dependencies..."
 apt-get update -q
