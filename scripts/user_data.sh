@@ -51,7 +51,7 @@ MLFLOW_TRACKING_URI="$MLFLOW_SERVER_URL" python3 train.py \
   --epochs 3 \
   --imgsz 320 \
   --batch 64 \
-  --workers 8
+  --workers 4
 TRAIN_EXIT=$?
 if [ $TRAIN_EXIT -ne 0 ]; then
   echo "ERROR: Training failed with exit code $TRAIN_EXIT"
