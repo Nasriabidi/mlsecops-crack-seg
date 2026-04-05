@@ -99,28 +99,31 @@ jobs:
       - name: Register model in MLflow
         if: success()
         env:
-          MODEL_NAME: ${{ steps.model.outputs.name }}
-          MODEL_KEY:  ${{ steps.model.outputs.key }}
-          GIT_SHA:    ${{ github.sha }}
+          MODEL_NAME:        ${{ steps.model.outputs.name }}
+          MODEL_KEY:         ${{ steps.model.outputs.key }}
+          GIT_SHA:           ${{ github.sha }}
+          MLFLOW_SERVER_URL: http://3.237.179.59
         run: |
           pip install mlflow boto3 --quiet
           python - <<'EOF'
           import mlflow
           import os
-
           model_name = os.environ["MODEL_NAME"]
-          model_key  = os.environ["MODEL_KEY"]
-          bucket     = os.environ.get("MODELS_BUCKET", "mlsecops-models-351611731527")
           git_sha    = os.environ["GIT_SHA"]
+          mlflow_url = os.environ["MLFLOW_SERVER_URL"]
 
-          mlflow.set_tracking_uri("s3://mlsecops-mlflow-351611731527")
+          mlflow.set_tracking_uri(mlflow_url)
           client = mlflow.tracking.MlflowClient()
 
+          experiment = client.get_experiment_by_name("crack-seg-training")
+          if not experiment:
+              print("ERROR: Experiment 'crack-seg-training' not found in MLflow")
+              exit(1)
+
           runs = client.search_runs(
-              experiment_ids=["1"],
+              experiment_ids=[experiment.experiment_id],
               filter_string=f"params.dataset_version = '{git_sha}'"
           )
-
           if not runs:
               print(f"No MLflow run found for git_sha={git_sha}")
               exit(1)
