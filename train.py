@@ -1,4 +1,5 @@
 import sys
+import os
 import glob
 import subprocess
 import argparse
@@ -12,7 +13,7 @@ from ultralytics import YOLO
 DATASET_PATH         = Path("./crack-seg")
 DATASET_YAML         = "crack-seg.yaml"
 MODEL_WEIGHTS        = "yolov8n-seg.pt"
-MLFLOW_TRACKING_URI  = "sqlite:///mlflow.db"
+MLFLOW_TRACKING_URI  = os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 MLFLOW_ARTIFACT_URI  = "s3://mlsecops-mlflow-351611731527"
 MLFLOW_EXP_NAME      = "crack-seg-training"
 

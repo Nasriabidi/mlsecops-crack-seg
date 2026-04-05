@@ -7,6 +7,7 @@ cat > /home/ubuntu/run_training.sh << 'TRAINING_SCRIPT'
 REPO_URL="__REPO_URL__"
 GIT_SHA="__GIT_SHA__"
 MODELS_BUCKET="__MODELS_BUCKET__"
+MLFLOW_SERVER_URL="__MLFLOW_SERVER_URL__"
 
 LOG_FILE="/var/log/training.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -14,6 +15,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "=============================================="
 echo " MLSecOps CT - Training Script"
 echo " Git SHA: $GIT_SHA"
+echo " MLflow:  $MLFLOW_SERVER_URL"
 echo " $(date -u)"
 echo "=============================================="
 
@@ -45,7 +47,7 @@ pip3 install s3fs --quiet || echo "WARNING: s3fs failed"
 echo "[3/6] DONE $(date -u)"
 
 echo "[4/6] Starting training... $(date -u)"
-python3 train.py \
+MLFLOW_TRACKING_URI="$MLFLOW_SERVER_URL" python3 train.py \
   --epochs 3 \
   --imgsz 320 \
   --batch 64 \
@@ -77,9 +79,10 @@ shutdown -h now
 TRAINING_SCRIPT
 
 # ── Inject variables into the script ─────────────────────────────────────────
-sed -i "s|__REPO_URL__|${repo_url}|g" /home/ubuntu/run_training.sh
-sed -i "s|__GIT_SHA__|${git_sha}|g" /home/ubuntu/run_training.sh
-sed -i "s|__MODELS_BUCKET__|${models_bucket}|g" /home/ubuntu/run_training.sh
+sed -i "s|__REPO_URL__|${repo_url}|g"                   /home/ubuntu/run_training.sh
+sed -i "s|__GIT_SHA__|${git_sha}|g"                     /home/ubuntu/run_training.sh
+sed -i "s|__MODELS_BUCKET__|${models_bucket}|g"         /home/ubuntu/run_training.sh
+sed -i "s|__MLFLOW_SERVER_URL__|${mlflow_server_url}|g" /home/ubuntu/run_training.sh
 
 chmod +x /home/ubuntu/run_training.sh
 

@@ -31,3 +31,9 @@ variable "repo_url" {
   description = "GitHub repo URL for cloning on EC2"
   type        = string
 }
+
+variable "mlflow_server_url" {
+  description = "MLflow tracking server URL"
+  type        = string
+  default     = "http://44.203.24.12"
+}

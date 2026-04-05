@@ -127,11 +127,12 @@ resource "aws_instance" "training" {
     volume_size = 100
     volume_type = "gp3"
   }
-
+  
   user_data = templatefile("${path.module}/../scripts/user_data.sh", {
-    repo_url      = var.repo_url
-    git_sha       = var.git_sha
-    models_bucket = var.models_bucket
+    repo_url          = var.repo_url
+    git_sha           = var.git_sha
+    models_bucket     = var.models_bucket
+    mlflow_server_url = var.mlflow_server_url
   })
 
   tags = { Name = "mlsecops-training-${var.git_sha}" }
