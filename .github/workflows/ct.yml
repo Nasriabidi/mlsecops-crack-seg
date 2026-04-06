@@ -129,8 +129,10 @@ jobs:
               exit(1)
 
           run_id = runs[0].info.run_id
+          artifact_uri = runs[0].info.artifact_uri  # e.g. s3://mlsecops-mlflow-.../artifacts/1/<run_id>/artifacts
+          model_filename = os.environ["MODEL_NAME"]
           mv = mlflow.register_model(
-              model_uri=f"runs:/{run_id}/weights",
+              model_uri=f"{artifact_uri}/weights/{model_filename}",
               name="crack-seg"
           )
           print(f"Model registered: crack-seg v{mv.version}")
