@@ -13,9 +13,27 @@ from ultralytics import YOLO
 DATASET_PATH         = Path("./crack-seg")
 DATASET_YAML         = "crack-seg.yaml"
 MODEL_WEIGHTS        = "yolov8n-seg.pt"
-MLFLOW_TRACKING_URI  = os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
-MLFLOW_ARTIFACT_URI  = "s3://mlsecops-mlflow-351611731527"
 MLFLOW_EXP_NAME      = "crack-seg-training"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRITICAL FIX:
+# The original code defaulted to "sqlite:///mlflow.db" — a LOCAL file on the
+# training EC2. That means metrics were written to a file that gets destroyed
+# when Terraform destroys the training instance. The MLflow server never saw
+# those metrics, so the UI showed nothing and the registration step found no run.
+#
+# Now: MLFLOW_TRACKING_URI must always be set to the MLflow server URL.
+# It is passed in as an environment variable by the Terraform user_data script
+# on the training EC2 (see your training infra setup_training.sh / user_data).
+# There is no local SQLite fallback — if the env var is missing, we fail fast.
+# ─────────────────────────────────────────────────────────────────────────────
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI")
+if not MLFLOW_TRACKING_URI:
+    raise RuntimeError(
+        "MLFLOW_TRACKING_URI environment variable is not set.\n"
+        "Set it to your MLflow server URL, e.g.:\n"
+        "  export MLFLOW_TRACKING_URI=http://<mlflow-server-ip>"
+    )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
 log = logging.getLogger(__name__)
@@ -89,7 +107,6 @@ def train(epochs: int, imgsz: int, batch: int, workers: int, model_name: str) ->
         exist_ok=True,
     )
 
-    # Find best.pt — exclude mlflow folder
     matches = [
         m for m in glob.glob("runs/**/best.pt", recursive=True)
         if "mlflow" not in m
@@ -101,7 +118,6 @@ def train(epochs: int, imgsz: int, batch: int, workers: int, model_name: str) ->
     best_weights = Path(matches[0])
     log.info(f"Found best.pt at: {best_weights}")
 
-    # Rename best.pt → crack_seg_<sha7>_<YYYYMMDD>.pt
     named_weights = best_weights.parent / model_name
     best_weights.rename(named_weights)
     log.info(f"Model renamed and saved as: {named_weights}")
@@ -119,13 +135,12 @@ def log_to_mlflow(
     imgsz: int,
     batch: int,
 ):
-    log.info("Logging experiment to MLflow...")
+    log.info(f"Logging experiment to MLflow server: {MLFLOW_TRACKING_URI}")
 
-    # SQLite for tracking, S3 for artifacts
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXP_NAME)
 
-    with mlflow.start_run(tags={"dataset_version": dataset_version}):
+    with mlflow.start_run(tags={"dataset_version": dataset_version}) as run:
 
         # ── Params ────────────────────────────────────────────────────────────
         mlflow.log_params({
@@ -149,18 +164,23 @@ def log_to_mlflow(
             "fitness":        "fitness",
         }
 
+        logged_count = 0
         for mlflow_key, yolo_key in metrics_map.items():
             value = results.results_dict.get(yolo_key)
             if value is not None:
                 mlflow.log_metric(mlflow_key, value)
+                logged_count += 1
             else:
                 log.warning(f"Metric '{yolo_key}' not found in results, skipping.")
 
+        log.info(f"Logged {logged_count}/{len(metrics_map)} metrics to MLflow.")
+
         # ── Artifact: named model file ─────────────────────────────────────
         mlflow.log_artifact(str(best_weights), artifact_path="weights")
+        log.info(f"Model artifact uploaded to S3 via MLflow.")
 
-        run_id = mlflow.active_run().info.run_id
-        log.info(f"MLflow run logged. Run ID: {run_id}")
+        run_id = run.info.run_id
+        log.info(f"MLflow run complete. Run ID: {run_id}")
 
     log.info("MLflow logging complete.")
 
@@ -180,8 +200,9 @@ def main():
     dataset_version = get_dvc_dataset_version()
     model_name      = get_model_name(dataset_version)
 
-    log.info(f"Dataset version (Git SHA): {dataset_version}")
-    log.info(f"Model will be saved as:    {model_name}")
+    log.info(f"MLflow server  : {MLFLOW_TRACKING_URI}")
+    log.info(f"Dataset version: {dataset_version}")
+    log.info(f"Model filename : {model_name}")
 
     if not args.skip_dvc_pull:
         pull_dataset()

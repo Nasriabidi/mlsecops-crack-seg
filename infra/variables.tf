@@ -35,5 +35,5 @@ variable "repo_url" {
 variable "mlflow_server_url" {
   description = "MLflow tracking server URL"
   type        = string
-  default     = "http://34.193.177.88"
+  default     = "http://3.225.213.40"
 }

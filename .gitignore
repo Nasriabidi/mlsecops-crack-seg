@@ -1,6 +1,6 @@
 # Dataset — managed by DVC, not Git
 /crack-seg/
-
+train.backup
 # DVC local config (machine-specific, may contain credential paths)
 .dvc/config.local
 
