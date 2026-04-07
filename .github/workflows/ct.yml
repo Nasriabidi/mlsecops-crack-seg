@@ -102,7 +102,7 @@ jobs:
           MODEL_NAME:        ${{ steps.model.outputs.name }}
           MODEL_KEY:         ${{ steps.model.outputs.key }}
           GIT_SHA:           ${{ github.sha }}
-          MLFLOW_SERVER_URL: http://34.193.177.88
+          MLFLOW_SERVER_URL: http://3.225.213.40
         run: |
           pip install mlflow boto3 --quiet
           python - <<'EOF'
