@@ -50,7 +50,9 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var="git_sha=${{ github.sha }}" \
-            -var="repo_url=https://github.com/${{ github.repository }}.git"
+            -var="repo_url=https://github.com/${{ github.repository }}.git" \
+            -var="app_repo_url=${{ env.APP_REPO_URL }}" \
+            -var="app_repo_token=${{ secrets.APP_REPO_TOKEN }}"
 
       - name: Compute model filename
         id: model
@@ -95,9 +97,11 @@ jobs:
         run: |
           terraform destroy -auto-approve \
             -var="git_sha=${{ github.sha }}" \
-            -var="repo_url=https://github.com/${{ github.repository }}.git"
+            -var="repo_url=https://github.com/${{ github.repository }}.git" \
+            -var="app_repo_url=${{ env.APP_REPO_URL }}" \
+            -var="app_repo_token=${{ secrets.APP_REPO_TOKEN }}"
 
-      - name: Register model + promote to S3 + push manifest
+      - name: Register model in MLflow
         if: success()
         env:
           MODEL_NAME:        ${{ steps.model.outputs.name }}
