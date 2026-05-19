@@ -17,6 +17,7 @@ env:
   AWS_REGION:    us-east-1
   MODELS_BUCKET: mlsecops-models-351611731527
   TF_WORKING_DIR: infra
+  APP_REPO_URL:  https://github.com/Nasriabidi/app.git
 
 jobs:
   train:
@@ -96,15 +97,18 @@ jobs:
             -var="git_sha=${{ github.sha }}" \
             -var="repo_url=https://github.com/${{ github.repository }}.git"
 
-      - name: Register model in MLflow
+      - name: Register model + promote to S3 + push manifest
         if: success()
         env:
           MODEL_NAME:        ${{ steps.model.outputs.name }}
           MODEL_KEY:         ${{ steps.model.outputs.key }}
           GIT_SHA:           ${{ github.sha }}
           MLFLOW_SERVER_URL: http://3.225.213.40
+          MODELS_BUCKET:     ${{ env.MODELS_BUCKET }}
+          APP_REPO_URL:      ${{ env.APP_REPO_URL }}
+          APP_REPO_TOKEN:    ${{ secrets.APP_REPO_TOKEN }}
         run: |
-          pip install mlflow boto3 --quiet
+          pip install mlflow boto3 whylogs ultralytics --quiet
           python - <<'EOF'
           import mlflow
           import os
@@ -129,10 +133,9 @@ jobs:
               exit(1)
 
           run_id = runs[0].info.run_id
-          artifact_uri = runs[0].info.artifact_uri  # e.g. s3://mlsecops-mlflow-.../artifacts/1/<run_id>/artifacts
-          model_filename = os.environ["MODEL_NAME"]
+          artifact_uri = runs[0].info.artifact_uri
           mv = mlflow.register_model(
-              model_uri=f"{artifact_uri}/weights/{model_filename}",
+              model_uri=f"{artifact_uri}/weights/{model_name}",
               name="crack-seg"
           )
           print(f"Model registered: crack-seg v{mv.version}")
