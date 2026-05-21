@@ -37,3 +37,15 @@ variable "mlflow_server_url" {
   type        = string
   default     = "http://3.225.213.40"
 }
+
+variable "app_repo_url" {
+  description = "App repo URL so CT can push model-manifest.json"
+  type        = string
+  default     = "https://github.com/Nasriabidi/app.git"
+}
+
+variable "app_repo_token" {
+  description = "GitHub PAT to push to app repo — passed via CT workflow secret"
+  type        = string
+  sensitive   = true
+}

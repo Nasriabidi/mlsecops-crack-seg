@@ -133,6 +133,8 @@ resource "aws_instance" "training" {
     git_sha           = var.git_sha
     models_bucket     = var.models_bucket
     mlflow_server_url = var.mlflow_server_url
+    app_repo_url      = var.app_repo_url    
+    app_repo_token    = var.app_repo_token   
   })
 
   tags = { Name = "mlsecops-training-${var.git_sha}" }
