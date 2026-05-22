@@ -10,6 +10,7 @@ from pathlib import Path
 
 import boto3
 import mlflow
+import pandas as pd
 import whylogs as why
 from ultralytics import YOLO
 
@@ -258,10 +259,11 @@ def build_and_upload_baseline(model_path: Path, dataset_version: str) -> str:
         log.warning("No inference results collected. Skipping baseline upload.")
         return ""
 
-    results_why  = why.log(records)
+    df           = pd.DataFrame(records)
+    results_why  = why.log(pandas=df)
     profile      = results_why.profile()
     profile_path = Path("/tmp/baseline_profile.bin")
-    profile.write(profile_path)
+    profile.write(str(profile_path))
 
     s3_key = f"crack-seg/{dataset_version}/baseline_profile.bin"
     s3 = boto3.client("s3")
