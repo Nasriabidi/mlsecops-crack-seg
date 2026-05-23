@@ -16,5 +16,5 @@ boto3>=1.26.0
 # Whylogs baseline profile generation
 whylogs>=1.3.0
 
-# DataFrame support for whylogs baseline
+# DataFrame support for whylogs baseline a
 pandas>=1.5.0
