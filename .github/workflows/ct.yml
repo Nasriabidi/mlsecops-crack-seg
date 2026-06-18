@@ -9,7 +9,6 @@ on:
       - 'train.py'
       - 'validate_dataset.py'
       - 'requirements.txt'
-      - 'README.md'
 
   workflow_dispatch:
 
