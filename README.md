@@ -55,7 +55,6 @@ Git Push → GitHub Actions → Terraform (EC2 c5.xlarge) → Training (YOLOv8n-
 | AWS S3 | Dataset storage, model registry |
 | DVC | Dataset versioning |
 | MLflow | Experiment tracking |
-| YOLOv8n-seg | Model architecture |
 | WhyLogs | Data profiling and baseline generation |
 
 ## How It Works
